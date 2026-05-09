@@ -5,11 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "csa"
 version = "0.0.1"
-description = "Compressed Sparse Attention (DeepSeek-V4 §2.3.1), isolated and fused as a drop-in attention module."
+description = "Compressed Sparse Attention from DeepSeek-V4, in pure PyTorch."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
-authors = [{ name = "csa-cutile" }]
 dependencies = [
   "torch>=2.4",
 ]
@@ -18,6 +17,9 @@ dependencies = [
 dev = [
   "pytest>=8",
   "ruff>=0.6",
+]
+demo = [
+  "matplotlib>=3.8",
 ]
 
 [tool.setuptools.packages.find]

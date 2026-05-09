@@ -1,16 +1,9 @@
-"""Invariant tests for src/csa/reference.py.
+"""Structural-invariant tests for src/csa/reference.py.
 
-These tests check structural correctness without DeepSeek inference fixtures:
-- output shapes / dtypes
-- causality of the lightning indexer (eq. 16) and top-k selector (eq. 17)
-- that the compression weights (eq. 11) form a valid softmax distribution
-- that top-k actually picks the highest finite scores
-- determinism for fixed inputs
-- that CSA degenerates to plain MQA over compressed KV when k = n_blk
-- shape validation errors
-
-When DeepSeek capture fixtures land in tests/fixtures/, add a fixtures-bitwise
-suite alongside this one (per CLAUDE.md testing pyramid).
+Covers shapes, causality, top-k correctness, the softmax property of eq. 11,
+the i = 0 boundary, determinism, the k = n_blk degenerate case, and shape
+validation. See tests/fixtures/README.md for the (currently absent) bitwise
+oracle layer.
 """
 
 from __future__ import annotations
@@ -119,11 +112,7 @@ def test_compression_weights_form_valid_softmax():
 
 
 def test_first_block_only_uses_a_branch():
-    """Per paper text: when i=0 the previous-block (b-branch) is padded with -inf logits and zero values.
-
-    The softmax over [Z^a + B^a; -inf] degenerates to a softmax over Z^a + B^a alone, so the
-    first compressed entry must equal the standard softmax-weighted sum over the first m a-tokens.
-    """
+    """i=0: b-branch is padded with -inf, so c_comp[0] is the a-only softmax sum."""
     torch.manual_seed(7)
     n, c, m = 8, 3, 4
     c_a = torch.randn(n, c)
@@ -148,11 +137,7 @@ def test_determinism(small_case):
 
 
 def test_k_equals_n_blocks_matches_dense_mqa_over_compressed(k_equals_blocks_case):
-    """When k = n_blk and the indexer is causal, every visible compressed block is selected.
-
-    The expected output for token t is therefore plain MQA over c_comp[:floor(t/m)] using the
-    same up-projected query q_t. This pins down eqs. 18–19 independently of the indexer (16–17).
-    """
+    """k = n_blk: top-k selects all visible blocks, so output equals MQA over c_comp[:floor(t/m)]."""
     case = k_equals_blocks_case
     out = csa_reference(h=case.h, cfg=case.cfg, p=case.p)
     cfg = case.cfg

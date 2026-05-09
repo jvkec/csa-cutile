@@ -18,6 +18,9 @@ dist/
 .idea/
 .vscode/
 
-# Source paper (large binary, fetched from HF — see README)
+# Source paper (fetched from HF — see README)
 DeepSeek_V4.pdf
 DeepSeek_V4.txt
+
+# Demo outputs
+demo/output/

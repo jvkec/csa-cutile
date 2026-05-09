@@ -1,51 +1,51 @@
 # csa-cutile
 
-DeepSeek-V4's **Compressed Sparse Attention (CSA)** — isolated from the V4
-inference bundle, implemented as a drop-in attention module, and (eventually)
-shipped as fused Triton kernels and an NVIDIA cuTile port.
+A pure-PyTorch reimplementation of **Compressed Sparse Attention** from
+DeepSeek-V4 (§2.3.1, eqs. 9–19), pulled out of the V4 inference bundle so it
+can be studied, tested, and dropped into other models.
 
-> Status: **scoping**. The pure-PyTorch reference (`src/csa/reference.py`,
-> derived line-by-line from V4 paper §2.3.1, eqs. 9–19) is in place and
-> validated against structural invariants. Kernels and the spike-gate
-> end-to-end run come next. See [CLAUDE.md](CLAUDE.md) for the full plan and
-> the project's strategic frame.
+The PyTorch code in `src/csa/reference.py` is meant to be readable, not fast.
+Fused Triton and cuTile kernels are planned but not in this v0.
 
-## Quickstart
+## Install
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev]"          # or: pip install -r requirements.txt
-pytest                           # 9 tests, ~50 ms
+pip install -e ".[dev,demo]"
+```
+
+## Demo
+
+The walkthrough loads a small synthetic input, runs CSA on it, and writes
+plots (compressed-KV heatmap, indexer scores, sparse attention pattern, KV
+cache savings) to `demo/output/`.
+
+```bash
+python demo/walkthrough.py
+```
+
+## Tests and bench
+
+```bash
+pytest                                     # ~50 ms, CPU only
 python bench/bench_attention.py --n 1024 --d 256 --m 16 --k 8
 ```
 
 ## Layout
 
 ```
-src/csa/
-  reference.py        # CSA from V4 §2.3.1 (eqs. 9–19) — the test oracle
-  __init__.py         # public API: CSAConfig, CSAParams, csa_reference, random_params
-tests/
-  test_reference.py   # shape, causality, top-k, dense-equivalence invariants
-  fixtures/README.md  # capture protocol for DeepSeek-inference fixtures (TODO)
-bench/
-  bench_attention.py  # the only three numbers: mem_ratio, tok/s, cos_sim
-docs/
-  derivation.md       # paper-to-code map for eqs. 9–19
+src/csa/reference.py     CSA forward, paper eqs. 9–19
+src/csa/__init__.py      public API: CSAConfig, CSAParams, csa_reference, random_params
+tests/                   structural-invariant tests for the reference
+bench/bench_attention.py mem ratio, tok/s, cosine sim vs. dense MQA
+demo/walkthrough.py      v0 demo: small example + plots
+docs/derivation.md       paper-to-code map
 ```
-
-The Triton (`triton_kernels.py`) and cuTile (`cutile_kernels.py`) modules will
-be added once `reference.py` matches DeepSeek-inference fixtures bitwise — see
-[CLAUDE.md](CLAUDE.md) "Testing pyramid" and "What NOT to do".
 
 ## References
 
 - DeepSeek-V4 paper: <https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro/blob/main/DeepSeek_V4.pdf>
-- DeepSeek-V4 inference impl (the source we extract CSA from): <https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro/tree/main/inference>
-- Project plan and conventions: [CLAUDE.md](CLAUDE.md)
-- Math walkthrough: [docs/derivation.md](docs/derivation.md)
+- DeepSeek-V4 inference: <https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro/tree/main/inference>
 
-## License
-
-Apache-2.0. See [LICENSE](LICENSE).
+Apache-2.0.

@@ -1,3 +1,9 @@
+"""Pure-PyTorch reference for Compressed Sparse Attention (DeepSeek-V4 §2.3.1).
+
+Equations 9-19 from the paper, implemented for readability rather than speed.
+See docs/derivation.md for the paper-to-code map.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,10 +14,15 @@ import torch
 
 @dataclass(frozen=True)
 class CSAConfig:
-    """
-    Reference (oracle) implementation of DeepSeek-V4 CSA paper §2.3.1 (eqs. 9–19).
+    """Hyperparameters for one CSA layer.
 
-    This file intentionally prioritizes clarity over performance.
+    m       : compression block size (paper)
+    k       : top-k blocks selected by the lightning indexer
+    n_h     : core-attention query heads
+    n_h_i   : indexer query heads
+    d_c     : shared low-rank query latent dim
+    c       : core-attention head dim
+    c_i     : indexer head dim
     """
 
     m: int
@@ -75,19 +86,10 @@ def _compress_overlapped(
     b_b: torch.Tensor,
     m: int,
 ) -> torch.Tensor:
-    """
-    CSA overlapped KV compression (eqs. 11–12).
+    """Overlapped KV compression (eqs. 11-12). Returns `[n // m, c]`.
 
-    Inputs:
-      - c_a, c_b: [n, c]
-      - z_a, z_b: [n, c]
-      - b_a, b_b: [m, c]
-    Output:
-      - c_comp: [n//m, c]
-
-    Notes:
-      - Assumes n is divisible by m (as in packed training/inference; paper discusses trailing discard elsewhere).
-      - For i=0, the "previous" block is padded with -inf logits and zero values (paper text).
+    The b-stream of the first output block is padded with -inf logits and zero
+    values, per the paper. Requires `n` divisible by `m`.
     """
     _check_2d("c_a", c_a)
     _check_2d("c_b", c_b)
@@ -145,12 +147,7 @@ def _core_attn_mqa(
     kv: torch.Tensor,  # [k, c]
     scale: Literal["sqrt_c", "none"] = "sqrt_c",
 ) -> torch.Tensor:
-    """
-    Core attention used in eq. 19, in MQA form (shared key/value).
-
-    Returns:
-      - o: [n_h, c]
-    """
+    """Multi-query core attention (eq. 19). Returns `[n_h, c]`."""
     _check_shape("q", q, (None, None))
     _check_shape("kv", kv, (None, None))
     if q.shape[1] != kv.shape[1]:
@@ -170,15 +167,12 @@ def csa_reference(
     cfg: CSAConfig,
     p: CSAParams,
 ) -> dict[str, torch.Tensor]:
-    """
-    CSA reference forward for a single sequence.
+    """CSA forward for a single sequence.
 
-    Returns a dict with:
-      - c_comp: [n_blk, c] compressed KV entries (eqs. 11–12)
-      - k_i_comp: [n_blk, c_i] compressed indexer keys (paper text)
-      - i_scores: [n, n_blk] index scores (eq. 16; masked where not visible)
-      - topk_idx: [n, k] selected block indices (eq. 17; padded with -1 when fewer visible)
-      - o: [n, n_h, c] core attention outputs per head (eq. 19)
+    Returns a dict with `c_comp [n_blk, c]`, `k_i_comp [n_blk, c_i]`,
+    `i_scores [n, n_blk]` (masked with -inf for non-visible blocks),
+    `topk_idx [n, k]` (-1 padding for early tokens with fewer than k visible
+    blocks), and `o [n, n_h, c]`.
     """
     _check_2d("h", h)
     n, d = h.shape
@@ -276,11 +270,7 @@ def random_params(
     generator: torch.Generator | None = None,
     std: float = 0.02,
 ) -> CSAParams:
-    """
-    Allocate a CSAParams with all projection/bias tensors initialized N(0, std^2).
-
-    Useful for tests and benchmarks. Not for training.
-    """
+    """CSAParams with N(0, std^2) projections and biases. For tests and demos."""
 
     def randn(*shape: int) -> torch.Tensor:
         t = torch.empty(*shape, device=device, dtype=dtype)

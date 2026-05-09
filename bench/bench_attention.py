@@ -1,25 +1,10 @@
-"""CSA vs. dense MQA: the three numbers (memory ratio, tok/s, cosine similarity).
+"""CSA vs. dense MQA: memory ratio, tok/s, cosine similarity.
 
-Per CLAUDE.md: do NOT add metrics. Add depth to these three.
+Memory ratio and tok/s are the meaningful numbers here. Cosine similarity is
+printed as a smoke check (NaN or zero indicates a bug); under random init it
+is not a quality signal.
 
-Usage:
-    python bench/bench_attention.py --n 1024 --d 256 --m 16 --k 8 --device cpu
-
-Notes on interpretation:
-- `mem_ratio`  : KV-cache footprint of CSA over dense (for a single layer at sequence
-                 length n). Lower is better for CSA; this number does not depend on
-                 weight initialization.
-- `tok_s`      : tokens / second of the *whole forward* (compression + indexer + MQA)
-                 vs. plain dense MQA over the uncompressed sequence. With the
-                 reference (pure-PyTorch, unfused) implementation, CSA will lose on
-                 wall-clock at small n; CSA is only expected to win once kernels are
-                 fused (Phase 1, Triton) and at long context (n >> m * k).
-- `cos_sim`    : cosine similarity between CSA's per-token output and the dense
-                 baseline's per-token output, with both initialized from the same
-                 random projections where shapes match. With random init this number
-                 is essentially noise; it only becomes a quality signal when CSA is
-                 bolted onto pre-trained LLM weights (the spike gate in CLAUDE.md).
-                 We still print it as a smoke check — sudden NaN/zero indicates a bug.
+    python bench/bench_attention.py --n 1024 --d 256 --m 16 --k 8
 """
 
 from __future__ import annotations
@@ -49,11 +34,7 @@ class BenchResult:
 
 
 def _dense_mqa_forward(*, h: torch.Tensor, w_kv: torch.Tensor, w_q: torch.Tensor, n_h: int, c: int) -> torch.Tensor:
-    """A plain causal MQA baseline over the uncompressed sequence.
-
-    Single shared KV head, n_h query heads, head_dim = c. Used as the dense reference
-    for the bench's three numbers. Not optimized.
-    """
+    """Causal MQA baseline: one shared KV head, n_h query heads, head_dim = c."""
     n, _ = h.shape
     kv = h @ w_kv  # [n, c]
     q = (h @ w_q).view(n, n_h, c)
@@ -65,14 +46,11 @@ def _dense_mqa_forward(*, h: torch.Tensor, w_kv: torch.Tensor, w_q: torch.Tensor
 
 
 def _kv_bytes_csa(n: int, m: int, c: int, c_i: int, dtype: torch.dtype) -> int:
-    """CSA per-layer KV cache: compressed main KV (n/m, c) + indexer keys (n/m, c_i)."""
     elem = torch.tensor([], dtype=dtype).element_size()
-    n_blk = n // m
-    return elem * n_blk * (c + c_i)
+    return elem * (n // m) * (c + c_i)
 
 
 def _kv_bytes_dense(n: int, c: int, dtype: torch.dtype) -> int:
-    """Dense MQA per-layer KV cache for a single shared KV head of width c."""
     elem = torch.tensor([], dtype=dtype).element_size()
     return elem * n * c
 
@@ -138,9 +116,7 @@ def _format(r: BenchResult) -> str:
         f"  mem_ratio (csa / dense KV) = {r.mem_ratio:.4f}\n"
         f"  tok/s   csa = {r.csa_tok_s:9.1f}   dense = {r.dense_tok_s:9.1f}   "
         f"speedup = {r.csa_tok_s / r.dense_tok_s:.3f}x\n"
-        f"  cos_sim (mean / p10) = {r.cos_sim_mean:+.4f} / {r.cos_sim_p10:+.4f}\n"
-        f"  note: cos_sim is meaningful only when CSA is bolted onto pretrained weights\n"
-        f"        (spike gate, CLAUDE.md). With random init this is essentially noise.\n"
+        f"  cos_sim (mean / p10) = {r.cos_sim_mean:+.4f} / {r.cos_sim_p10:+.4f}  (random init: not a quality signal)\n"
     )
 
 
