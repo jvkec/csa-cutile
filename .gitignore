@@ -1,5 +1,23 @@
 # Environments
-.venv
+.venv/
 
-# Misc
+# Python build / install artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Source paper (large binary, fetched from HF — see README)
 DeepSeek_V4.pdf
+DeepSeek_V4.txt

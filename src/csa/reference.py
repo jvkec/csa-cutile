@@ -232,7 +232,7 @@ def csa_reference(
         blk_of_t = torch.arange(n, device=h.device, dtype=torch.int64) // m  # floor(t/m)
         s_idx = torch.arange(n_blk, device=h.device, dtype=torch.int64).view(1, n_blk)
         visible = s_idx < blk_of_t.view(n, 1)
-        i_scores = i_scores.masked_fill(~visible, torch.finfo(i_scores.dtype).min)
+        i_scores = i_scores.masked_fill(~visible, float("-inf"))
 
     # eq. 17: top-k selection over I_{t,:}
     k = cfg.k
@@ -265,4 +265,44 @@ def csa_reference(
         "topk_idx": topk_idx,
         "o": o,
     }
+
+
+def random_params(
+    *,
+    cfg: CSAConfig,
+    d: int,
+    device: torch.device | str = "cpu",
+    dtype: torch.dtype = torch.float32,
+    generator: torch.Generator | None = None,
+    std: float = 0.02,
+) -> CSAParams:
+    """
+    Allocate a CSAParams with all projection/bias tensors initialized N(0, std^2).
+
+    Useful for tests and benchmarks. Not for training.
+    """
+
+    def randn(*shape: int) -> torch.Tensor:
+        t = torch.empty(*shape, device=device, dtype=dtype)
+        t.normal_(mean=0.0, std=std, generator=generator)
+        return t
+
+    return CSAParams(
+        w_a_kv=randn(d, cfg.c),
+        w_b_kv=randn(d, cfg.c),
+        w_a_z=randn(d, cfg.c),
+        w_b_z=randn(d, cfg.c),
+        b_a=randn(cfg.m, cfg.c),
+        b_b=randn(cfg.m, cfg.c),
+        w_a_k_i=randn(d, cfg.c_i),
+        w_b_k_i=randn(d, cfg.c_i),
+        w_a_z_i=randn(d, cfg.c_i),
+        w_b_z_i=randn(d, cfg.c_i),
+        b_a_i=randn(cfg.m, cfg.c_i),
+        b_b_i=randn(cfg.m, cfg.c_i),
+        w_dq=randn(d, cfg.d_c),
+        w_iuq=randn(cfg.d_c, cfg.c_i * cfg.n_h_i),
+        w_w=randn(d, cfg.n_h_i),
+        w_uq=randn(cfg.d_c, cfg.c * cfg.n_h),
+    )
 
